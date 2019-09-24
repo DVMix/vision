@@ -113,11 +113,128 @@ class Bottleneck(nn.Module):
         out = self.relu(out)
 
         return out
+    
+class TridentBlock(torch.nn.Module):
+    expansion = 4
+    def __init__(self, input_channels, output_channels, stride = 1, padding = [1,2,3], dilation = [1,2,3], 
+                 downsample = None, last = False, norm_layer=None):
+        super(TridentBlock, self).__init__()  
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+        self.shared_weights4convolution1 = torch.nn.Parameter(torch.randn(output_channels, input_channels , 1, 1))
+        self.shared_weights4convolution2 = torch.nn.Parameter(torch.randn(output_channels, output_channels, 3, 3))
+        self.shared_weights4convolution3 = torch.nn.Parameter(torch.randn(output_channels*self.expansion, output_channels, 1,1))       
+        self.bn11 = norm_layer(output_channels)
+        self.bn12 = norm_layer(output_channels)
+        self.bn13 = norm_layer(output_channels*self.expansion)        
+        self.bn21 = norm_layer(output_channels)
+        self.bn22 = norm_layer(output_channels)
+        self.bn23 = norm_layer(output_channels*self.expansion)        
+        self.bn31 = norm_layer(output_channels)
+        self.bn32 = norm_layer(output_channels)
+        self.bn33 = norm_layer(output_channels*self.expansion)        
+        self.relu1 = torch.nn.ReLU(inplace = True)
+        self.relu2 = torch.nn.ReLU(inplace = True)
+        self.relu3 = torch.nn.ReLU(inplace = True)
+        self.downsample = downsample
+        self.stride = stride
+        self.padding = padding
+        self.dilation = dilation 
+        self.last = last
 
+#----====----====----====----====----====----====----====----====----====----====----====----====----====
+    def forward_branch_1(self,x):
+        residual = x
+        # conv 1x1
+        output = torch.nn.functional.conv2d(x, self.shared_weights4convolution1, bias = None)
+        output = self.bn11(output)
+        output = self.relu1(output)
+        # conv 3x3
+        output = torch.nn.functional.conv2d(output, self.shared_weights4convolution2, bias = None,
+                                            stride = self.stride, padding = self.padding[0], 
+                                            dilation = self.dilation[0])
+        output = self.bn12(output)
+        output = self.relu1(output)
+        # conv 1x1
+        output = torch.nn.functional.conv2d(output, self.shared_weights4convolution3, bias = None)
+        output = self.bn13(output)
+        if self.downsample is not None:
+            residual = self.downsample(x)        
+        output += residual
+        output = self.relu1(output)
+        return output
+    
+#----====----====----====----====----====----====----====----====----====----====----====----====----====
+    def forward_branch_2(self,x): # bran
+        residual = x
+        # conv 1x1
+        output = torch.nn.functional.conv2d(x, self.shared_weights4convolution1, bias = None)
+        output = self.bn21(output)
+        output = self.relu2(output)
+        # conv 3x3
+        output = torch.nn.functional.conv2d(output, self.shared_weights4convolution2, bias = None,
+                                            stride = self.stride, padding = self.padding[1], 
+                                            dilation = self.dilation[1])
+        output = self.bn22(output)
+        output = self.relu2(output)
+        # conv 1x1
+        output = torch.nn.functional.conv2d(output, self.shared_weights4convolution3, bias = None)
+        output = self.bn23(output)
+        if self.downsample is not None:
+            residual = self.downsample(x)
+        
+        output += residual
+        output = self.relu2(output)
+        return output
+    
+#----====----====----====----====----====----====----====----====----====----====----====----====----====
+    def forward_branch_3(self,x): # bran
+        residual = x
+        # conv 1x1
+        output = torch.nn.functional.conv2d(x, self.shared_weights4convolution1, bias = None)
+        output = self.bn31(output)
+        output = self.relu3(output)
+        # conv 3x3
+        output = torch.nn.functional.conv2d(output, self.shared_weights4convolution2, bias = None,
+                                            stride = self.stride, padding = self.padding[2], 
+                                            dilation = self.dilation[2])
+        output = self.bn32(output)
+        output = self.relu3(output)
+        # conv 1x1
+        output = torch.nn.functional.conv2d(output, self.shared_weights4convolution3, bias = None)
+        output = self.bn33(output)
+        if self.downsample is not None:
+            residual = self.downsample(x)
+        output += residual
+        output = self.relu3(output)
+        return output
+    
+#----====----====----====----====----====----====----====----====----====----====----====----====----====
+#----====----====----ВЫХОЫ ИЗ ТРИDЕНТ СЛОЯ---====----====----====----====----====----====----====----====
+#----====----====----====----====----====----====----====----====----====----====----====----====----====
+    def forward(self,x):
+        feature_list = list()
+        # if self.downsample is not None:
+        if isinstance(x,type(list())):
+            feature_list.append(self.forward_branch_1(x[0]))
+            feature_list.append(self.forward_branch_2(x[1]))
+            feature_list.append(self.forward_branch_3(x[2])) 
+        else:
+            feature_list.append(self.forward_branch_1(x))
+            feature_list.append(self.forward_branch_2(x))
+            feature_list.append(self.forward_branch_3(x))
+        if self.last:
+            """check this immediately!!!!!"""
+            feature_list = torch.cat((feature_list[0],feature_list[1],feature_list[2]), dim = 1) 
+        return feature_list
+#----====----====----====----====----====----====----====----====----====----====----====----====----====
+#----====----====----====----====----====----====----====----====----====----====----====----====----====
+#----====----====----====----====----====----====----====----====----====----====----====----====----====
+#----====----====----====----====----====----====----====----====----====----====----====----====----====
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, layers, num_classes=1000, zero_init_residual=False,
+    def __init__(self, block, trident_block, layers, num_classes=1000, zero_init_residual=False,
                  groups=1, width_per_group=64, replace_stride_with_dilation=None,
                  norm_layer=None):
         super(ResNet, self).__init__()
@@ -146,8 +263,12 @@ class ResNet(nn.Module):
                                        dilate=replace_stride_with_dilation[0])
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2,
                                        dilate=replace_stride_with_dilation[1])
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
+        if trident_block is None:
+            self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
                                        dilate=replace_stride_with_dilation[2])
+        else:
+            self.layer4 = self._make_layer1(trident_block, 512, layers[3], stride=2)
+            
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
@@ -191,7 +312,24 @@ class ResNet(nn.Module):
                                 norm_layer=norm_layer))
 
         return nn.Sequential(*layers)
-
+    
+    def _make_layer1(self, block, planes, blocks, stride=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+            torch.nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
+            self._norm_layer(planes * block.expansion),
+      )
+        layers = []
+        layers.append(block(self.inplanes, planes, stride = stride, downsample = downsample))
+        self.inplanes = planes * block.expansion
+        for i in range(1, blocks):
+            if i != blocks -1 :
+                layers.append(block(self.inplanes, planes))
+            else:
+                layers.append(block(self.inplanes, planes, last = True))
+        return nn.Sequential(*layers)
+    
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
@@ -210,8 +348,8 @@ class ResNet(nn.Module):
         return x
 
 
-def _resnet(arch, block, layers, pretrained, progress, **kwargs):
-    model = ResNet(block, layers, **kwargs)
+def _resnet(arch, block, trident_block, layers, pretrained, progress, **kwargs):
+    model = ResNet(block, trident_block, layers, **kwargs)
     if pretrained:
         state_dict = load_state_dict_from_url(model_urls[arch],
                                               progress=progress)
@@ -341,3 +479,17 @@ def wide_resnet101_2(pretrained=False, progress=True, **kwargs):
     kwargs['width_per_group'] = 64 * 2
     return _resnet('wide_resnet101_2', Bottleneck, [3, 4, 23, 3],
                    pretrained, progress, **kwargs)
+
+
+def trident_resnet50(pretrained=False, progress=True, **kwargs):
+    return _resnet('trident_resnet50', Bottleneck, TridentBlock, [3, 4, 6, 10], pretrained, progress,
+                   **kwargs)
+
+def trident_resnet101(pretrained=False, progress=True, **kwargs):
+    return _resnet('trident_resnet101', Bottleneck, TridentBlock, [3, 4, 23, 10], pretrained, progress,
+                   **kwargs)
+
+def trident_resnet152(pretrained=False, progress=True, **kwargs):
+    return _resnet('trident_resnet152', Bottleneck, TridentBlock, [3, 8, 36, 10], pretrained, progress,
+                   **kwargs)
+

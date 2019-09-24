@@ -31,12 +31,14 @@ class GeneralizedRCNNTransform(nn.Module):
 
     def forward(self, images, targets=None):
         images = [img for img in images]
+        #print('input size = ',images[0].shape)
         for i in range(len(images)):
             image = images[i]
             target = targets[i] if targets is not None else targets
             if image.dim() != 3:
                 raise ValueError("images is expected to be a list of 3d tensors "
                                  "of shape [C, H, W], got {}".format(image.shape))
+            #print('image before norm -->', image.shape)
             image = self.normalize(image)
             image, target = self.resize(image, target)
             images[i] = image
@@ -46,12 +48,14 @@ class GeneralizedRCNNTransform(nn.Module):
         image_sizes = [img.shape[-2:] for img in images]
         images = self.batch_images(images)
         image_list = ImageList(images, image_sizes)
-        return image_list, targets
+        # return image_list, targets
+        return images, image_sizes, targets # my CODE
 
     def normalize(self, image):
         dtype, device = image.dtype, image.device
-        mean = torch.as_tensor(self.image_mean, dtype=dtype, device=device)
-        std = torch.as_tensor(self.image_std, dtype=dtype, device=device)
+        mean = torch.as_tensor(self.image_mean, dtype=dtype).cuda()
+        std = torch.as_tensor(self.image_std, dtype=dtype).cuda()
+        #print('mean=', mean.shape, ' std = ', std.shape)
         return (image - mean[:, None, None]) / std[:, None, None]
 
     def resize(self, image, target):

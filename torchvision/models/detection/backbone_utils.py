@@ -50,13 +50,16 @@ def resnet_fpn_backbone(backbone_name, pretrained):
             parameter.requires_grad_(False)
 
     return_layers = {'layer1': 0, 'layer2': 1, 'layer3': 2, 'layer4': 3}
-
+    if 'trident' in backbone_name:
+        multiplier = 3
+    else:
+        multiplier = 1
     in_channels_stage2 = backbone.inplanes // 8
     in_channels_list = [
         in_channels_stage2,
         in_channels_stage2 * 2,
         in_channels_stage2 * 4,
-        in_channels_stage2 * 8,
+        in_channels_stage2 * 8 * multiplier,
     ]
     out_channels = 256
     return BackboneWithFPN(backbone, return_layers, in_channels_list, out_channels)

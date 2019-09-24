@@ -152,7 +152,7 @@ class BoxCoder(object):
         """
         dtype = reference_boxes.dtype
         device = reference_boxes.device
-        weights = torch.as_tensor(self.weights, dtype=dtype, device=device)
+        weights = torch.as_tensor(self.weights, dtype=dtype).cuda()
         targets = encode_boxes(reference_boxes, proposals, weights)
 
         return targets

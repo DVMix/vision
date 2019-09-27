@@ -273,6 +273,10 @@ class RegionProposalNetwork(torch.nn.Module):
         matched_gt_boxes = []
         for anchors_per_image, targets_per_image in zip(anchors, targets):
             gt_boxes = targets_per_image["boxes"]
+            
+#             print('gt_boxes --->', gt_boxes.device)
+#             print('anchors_per_image --->', anchors_per_image.device)
+            anchors_per_image = anchors_per_image.to(gt_boxes.device)
             match_quality_matrix = self.box_similarity(gt_boxes, anchors_per_image)
             matched_idxs = self.proposal_matcher(match_quality_matrix)
             # get the targets corresponding GT for each proposal
@@ -403,6 +407,12 @@ class RegionProposalNetwork(torch.nn.Module):
         #=====================================================
         # anchors = self.anchor_generator(images, features)
         anchors = self.anchor_generator(images, image_sizes, features)
+        anchors = [anchors_per_image.cuda() for anchors_per_image in anchors]
+#         if targets is not None:
+#             target_device = targets[0]['boxes'].device
+#             print('target_device = ', target_device)
+#             print('anchors=', anchors[0].device)
+#             anchors = [anchors_per_image.to(target_device) for anchors_per_image in anchors]
         #=====================================================
         num_images = len(anchors)
         num_anchors_per_level = [o[0].numel() for o in objectness]

@@ -117,7 +117,7 @@ class Bottleneck(nn.Module):
 class TridentBlock(torch.nn.Module):
     expansion = 4
     def __init__(self, input_channels, output_channels, stride = 1, padding = [1,2,3], dilation = [1,2,3], 
-                 downsample = None, last = False, norm_layer=None):
+                 downsample = None, last = False, norm_layer=None, fast_mode = False):
         super(TridentBlock, self).__init__()  
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
@@ -141,6 +141,7 @@ class TridentBlock(torch.nn.Module):
         self.padding = padding
         self.dilation = dilation 
         self.last = last
+        self.fast_mode = fast_mode
 
 #----====----====----====----====----====----====----====----====----====----====----====----====----====
     def forward_branch_1(self,x):
@@ -224,8 +225,11 @@ class TridentBlock(torch.nn.Module):
             feature_list.append(self.forward_branch_2(x))
             feature_list.append(self.forward_branch_3(x))
         if self.last:
-            """check this immediately!!!!!"""
-            feature_list = torch.cat((feature_list[0],feature_list[1],feature_list[2]), dim = 1) 
+            if self.fast_mode:
+                feature_list = feature_list[1]
+            else:
+                """check this immediately!!!!!"""
+                feature_list = torch.cat((feature_list[0],feature_list[1],feature_list[2]), dim = 1) 
         return feature_list
 #----====----====----====----====----====----====----====----====----====----====----====----====----====
 #----====----====----====----====----====----====----====----====----====----====----====----====----====
@@ -236,12 +240,12 @@ class ResNet(nn.Module):
 
     def __init__(self, block, trident_block, layers, num_classes=1000, zero_init_residual=False,
                  groups=1, width_per_group=64, replace_stride_with_dilation=None,
-                 norm_layer=None):
+                 norm_layer=None, fast_mode = False):
         super(ResNet, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         self._norm_layer = norm_layer
-
+        self.fast_mode = fast_mode
         self.inplanes = 64
         self.dilation = 1
         if replace_stride_with_dilation is None:
@@ -314,6 +318,7 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
     
     def _make_layer1(self, block, planes, blocks, stride=1):
+        norm_layer = self._norm_layer
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
@@ -321,13 +326,14 @@ class ResNet(nn.Module):
             self._norm_layer(planes * block.expansion),
       )
         layers = []
-        layers.append(block(self.inplanes, planes, stride = stride, downsample = downsample))
+        layers.append(block(self.inplanes, planes, stride = stride, downsample = downsample, norm_layer = norm_layer,
+                            fast_mode = self.fast_mode, ))
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
             if i != blocks -1 :
-                layers.append(block(self.inplanes, planes))
+                layers.append(block(self.inplanes, planes, norm_layer = norm_layer))
             else:
-                layers.append(block(self.inplanes, planes, last = True))
+                layers.append(block(self.inplanes, planes, norm_layer = norm_layer, last = True))
         return nn.Sequential(*layers)
     
     def forward(self, x):
@@ -482,14 +488,14 @@ def wide_resnet101_2(pretrained=False, progress=True, **kwargs):
 
 
 def trident_resnet50(pretrained=False, progress=True, **kwargs):
-    return _resnet('trident_resnet50', Bottleneck, TridentBlock, [3, 4, 6, 10], pretrained, progress,
+    return _resnet('trident_resnet50', Bottleneck, TridentBlock, [3, 4, 6, 3], pretrained, progress,
                    **kwargs)
 
 def trident_resnet101(pretrained=False, progress=True, **kwargs):
-    return _resnet('trident_resnet101', Bottleneck, TridentBlock, [3, 4, 23, 10], pretrained, progress,
+    return _resnet('trident_resnet101', Bottleneck, TridentBlock, [3, 4, 23, 3], pretrained, progress,
                    **kwargs)
 
 def trident_resnet152(pretrained=False, progress=True, **kwargs):
-    return _resnet('trident_resnet152', Bottleneck, TridentBlock, [3, 8, 36, 10], pretrained, progress,
+    return _resnet('trident_resnet152', Bottleneck, TridentBlock, [3, 8, 36, 3], pretrained, progress,
                    **kwargs)
 

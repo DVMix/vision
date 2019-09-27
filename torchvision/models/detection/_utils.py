@@ -150,9 +150,14 @@ class BoxCoder(object):
             reference_boxes (Tensor): reference boxes
             proposals (Tensor): boxes to be encoded
         """
+        
         dtype = reference_boxes.dtype
         device = reference_boxes.device
-        weights = torch.as_tensor(self.weights, dtype=dtype).cuda()
+        weights = torch.as_tensor(self.weights, dtype=dtype, device = device)
+        proposals = proposals.to(device)
+#         print('proposals -->', proposals.device)
+#         print('reference_boxes -->', reference_boxes.device)
+#         print('weights -->', weights.device)
         targets = encode_boxes(reference_boxes, proposals, weights)
 
         return targets
@@ -178,8 +183,8 @@ class BoxCoder(object):
             rel_codes (Tensor): encoded boxes
             boxes (Tensor): reference boxes.
         """
-
-        boxes = boxes.to(rel_codes.dtype)
+        device = rel_codes.device
+        boxes = boxes.to(rel_codes.dtype).to(device)
 
         widths = boxes[:, 2] - boxes[:, 0]
         heights = boxes[:, 3] - boxes[:, 1]
@@ -187,15 +192,28 @@ class BoxCoder(object):
         ctr_y = boxes[:, 1] + 0.5 * heights
 
         wx, wy, ww, wh = self.weights
+#         print('wx.device -->', wx.device,\
+#               'wy.device -->', wy.device,\
+#               'ww.device -->', ww.device,\
+#               'wh.device -->', wh.device,\
+#               '\n')
         dx = rel_codes[:, 0::4] / wx
         dy = rel_codes[:, 1::4] / wy
         dw = rel_codes[:, 2::4] / ww
         dh = rel_codes[:, 3::4] / wh
-
+#         print('dx.device -->', dx.device,\
+#               'dy.device -->', dy.device,\
+#               'dw.device -->', dw.device,\
+#               'dh.device -->', dh.device,\
+#               '\n')
         # Prevent sending too large values into torch.exp()
         dw = torch.clamp(dw, max=self.bbox_xform_clip)
         dh = torch.clamp(dh, max=self.bbox_xform_clip)
-
+#         print('dx.device -->', dx.device,\
+#               'widths.device -->', widths.device,\
+#               'heights.device -->', heights.device,\
+#               'ctr_x.device -->', ctr_x.device,\
+#               'ctr_y.device -->', ctr_y.device, '\n')
         pred_ctr_x = dx * widths[:, None] + ctr_x[:, None]
         pred_ctr_y = dy * heights[:, None] + ctr_y[:, None]
         pred_w = torch.exp(dw) * widths[:, None]

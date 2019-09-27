@@ -19,7 +19,6 @@ class GeneralizedRCNNTransform(nn.Module):
 
     It returns a ImageList for the inputs, and a List[Dict[Tensor]] for the targets
     """
-
     def __init__(self, min_size, max_size, image_mean, image_std):
         super(GeneralizedRCNNTransform, self).__init__()
         if not isinstance(min_size, (list, tuple)):
@@ -30,6 +29,8 @@ class GeneralizedRCNNTransform(nn.Module):
         self.image_std = image_std
 
     def forward(self, images, targets=None):
+#         print('Forward') 
+#         print('images = ', images)
         images = [img for img in images]
         #print('input size = ',images[0].shape)
         for i in range(len(images)):
@@ -47,18 +48,22 @@ class GeneralizedRCNNTransform(nn.Module):
 
         image_sizes = [img.shape[-2:] for img in images]
         images = self.batch_images(images)
-        image_list = ImageList(images, image_sizes)
+        # image_list = ImageList(images, image_sizes)
         # return image_list, targets
+        #print('returning data')
+        
         return images, image_sizes, targets # my CODE
 
     def normalize(self, image):
+        #print('in norm! - ', image.shape)
         dtype, device = image.dtype, image.device
-        mean = torch.as_tensor(self.image_mean, dtype=dtype).cuda()
-        std = torch.as_tensor(self.image_std, dtype=dtype).cuda()
+        mean = torch.as_tensor(self.image_mean, dtype=dtype, device = device)
+        std = torch.as_tensor(self.image_std, dtype=dtype, device = device)
         #print('mean=', mean.shape, ' std = ', std.shape)
         return (image - mean[:, None, None]) / std[:, None, None]
 
     def resize(self, image, target):
+        #print('in resize')
         h, w = image.shape[-2:]
         min_size = float(min(image.shape[-2:]))
         max_size = float(max(image.shape[-2:]))
@@ -90,7 +95,6 @@ class GeneralizedRCNNTransform(nn.Module):
             keypoints = resize_keypoints(keypoints, (h, w), image.shape[-2:])
             target["keypoints"] = keypoints
         return image, target
-
     def batch_images(self, images, size_divisible=32):
         # concatenate
         max_size = tuple(max(s) for s in zip(*[img.shape for img in images]))
